@@ -1,28 +1,17 @@
 import { Tenant } from '../types/tenant';
+import { supabase } from '../lib/supabase';
 
-/**
- * Extract subdomain from hostname
- * @param hostname - The current hostname (e.g., 'company1.yourapp.com')
- * @returns The subdomain part (e.g., 'company1')
- */
 export const extractSubdomain = (hostname: string): string => {
-  // Remove port if present
   const hostnameWithoutPort = hostname.split(':')[0];
-
-  // Split hostname into parts
   const parts = hostnameWithoutPort.split('.');
 
-  // For localhost development
   if (hostnameWithoutPort === 'localhost' || hostnameWithoutPort.includes('127.0.0.1')) {
-    // Check for custom localhost subdomain (e.g., company1.localhost)
     if (parts.length > 1 && parts[1] === 'localhost') {
       return parts[0];
     }
     return '';
   }
 
-  // For production domains
-  // If we have more than 2 parts (subdomain.domain.com), return the first part
   if (parts.length > 2) {
     return parts[0];
   }
@@ -30,21 +19,14 @@ export const extractSubdomain = (hostname: string): string => {
   return '';
 };
 
-/**
- * Get the full domain from hostname
- * @param hostname - The current hostname
- * @returns The domain part (e.g., 'yourapp.com')
- */
 export const extractDomain = (hostname: string): string => {
   const hostnameWithoutPort = hostname.split(':')[0];
   const parts = hostnameWithoutPort.split('.');
 
-  // For localhost
   if (hostnameWithoutPort === 'localhost' || hostnameWithoutPort.includes('127.0.0.1')) {
     return hostnameWithoutPort;
   }
 
-  // For production, return the last two parts (domain.com)
   if (parts.length >= 2) {
     return parts.slice(-2).join('.');
   }
@@ -52,203 +34,185 @@ export const extractDomain = (hostname: string): string => {
   return hostnameWithoutPort;
 };
 
-/**
- * Check if current request is from main domain (superadmin)
- * @param hostname - The current hostname
- * @returns Boolean indicating if this is the main domain
- */
 export const isMainDomain = (hostname: string): boolean => {
   const subdomain = extractSubdomain(hostname);
   return !subdomain || subdomain === 'www';
 };
 
-/**
- * Get tenant identifier from subdomain
- * @param hostname - The current hostname
- * @returns Tenant identifier (subdomain or null for main domain)
- */
 export const getTenantIdentifier = (hostname: string): string | null => {
   if (isMainDomain(hostname)) {
-    return null; // Main domain - superadmin access
+    return null;
   }
   return extractSubdomain(hostname);
 };
 
-/**
- * Mock tenant database - In production, this would be a real database call
- * This simulates the tenant lookup based on subdomain
- */
-const MOCK_TENANT_DATABASE: Record<string, Tenant> = {
-  'techcorp': {
-    id: 'tenant_1',
-    name: 'TechCorp Finance',
-    subdomain: 'techcorp',
-    status: 'active',
-    proprietorName: 'Rajesh Kumar',
-    phoneNumber: '+91-9876543210',
-    address: '123 Business District, Mumbai, Maharashtra 400001',
-    gstNumber: '27AABCT1234F1Z5',
-    settings: {
-      branding: {
-        primaryColor: '#3B82F6',
-        secondaryColor: '#1E40AF'
-      },
-      features: {
-        voip: true,
-        sms: true,
-        analytics: true,
-        apiAccess: true
-      }
-    },
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-15'),
-    createdBy: 'superadmin_1'
-  },
-  'globallending': {
-    id: 'tenant_2',
-    name: 'Global Lending Solutions',
-    subdomain: 'globallending',
-    status: 'active',
-    proprietorName: 'Priya Sharma',
-    phoneNumber: '+91-9876543211',
-    address: '456 Finance Street, Delhi, Delhi 110001',
-    gstNumber: '07AABCG5678F1Z3',
-    settings: {
-      branding: {
-        primaryColor: '#10B981',
-        secondaryColor: '#059669'
-      },
-      features: {
-        voip: true,
-        sms: false,
-        analytics: true,
-        apiAccess: false
-      }
-    },
-    createdAt: new Date('2024-02-01'),
-    updatedAt: new Date('2024-02-01'),
-    createdBy: 'superadmin_1'
-  },
-  'quickloans': {
-    id: 'tenant_3',
-    name: 'QuickLoans Ltd',
-    subdomain: 'quickloans',
-    status: 'active',
-    proprietorName: 'Amit Patel',
-    phoneNumber: '+91-9876543212',
-    address: '789 Loan Avenue, Ahmedabad, Gujarat 380001',
-    gstNumber: '24AABCH9012F1Z8',
-    settings: {
-      branding: {
-        primaryColor: '#F59E0B',
-        secondaryColor: '#D97706'
-      },
-      features: {
-        voip: false,
-        sms: false,
-        analytics: false,
-        apiAccess: false
-      }
-    },
-    createdAt: new Date('2024-02-15'),
-    updatedAt: new Date('2024-02-15'),
-    createdBy: 'superadmin_1'
-  }
-};
-
-/**
- * Get tenant by subdomain
- * @param subdomain - The subdomain to look up
- * @returns Promise<Tenant | null> - The tenant data or null if not found
- */
 export const getTenantBySubdomain = async (subdomain: string): Promise<Tenant | null> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  // Normalize subdomain (lowercase, trim)
   const normalizedSubdomain = subdomain.toLowerCase().trim();
 
-  return MOCK_TENANT_DATABASE[normalizedSubdomain] || null;
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('*')
+    .eq('subdomain', normalizedSubdomain)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching tenant by subdomain:', error);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    subdomain: data.subdomain,
+    status: data.status,
+    proprietorName: data.proprietor_name,
+    phoneNumber: data.phone_number,
+    address: data.address,
+    gstNumber: data.gst_number,
+    plan: data.plan,
+    maxUsers: data.max_users,
+    maxConnections: data.max_connections,
+    settings: data.settings || { branding: {}, features: {} },
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
+  };
 };
 
-/**
- * Get all tenants (for superadmin)
- * @returns Promise<Tenant[]> - All tenants
- */
 export const getAllTenants = async (): Promise<Tenant[]> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-  return Object.values(MOCK_TENANT_DATABASE);
+  if (error) {
+    console.error('Error fetching all tenants:', error);
+    return [];
+  }
+
+  return data.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    subdomain: item.subdomain,
+    status: item.status,
+    proprietorName: item.proprietor_name,
+    phoneNumber: item.phone_number,
+    address: item.address,
+    gstNumber: item.gst_number,
+    plan: item.plan,
+    maxUsers: item.max_users,
+    maxConnections: item.max_connections,
+    settings: item.settings || { branding: {}, features: {} },
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    createdBy: item.created_by
+  }));
 };
 
-/**
- * Create new tenant
- * @param tenantData - The tenant data to create
- * @returns Promise<Tenant> - The created tenant
- */
 export const createTenant = async (tenantData: Omit<Tenant, 'id' | 'createdAt' | 'updatedAt'>): Promise<Tenant> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 300));
+  const { data, error } = await supabase
+    .from('tenants')
+    .insert({
+      name: tenantData.name,
+      subdomain: tenantData.subdomain.toLowerCase(),
+      status: tenantData.status,
+      proprietor_name: tenantData.proprietorName,
+      phone_number: tenantData.phoneNumber,
+      address: tenantData.address,
+      gst_number: tenantData.gstNumber,
+      plan: tenantData.plan || 'basic',
+      max_users: tenantData.maxUsers || 10,
+      max_connections: tenantData.maxConnections || 5,
+      settings: tenantData.settings,
+      created_by: tenantData.createdBy
+    })
+    .select()
+    .single();
 
-  const newTenant: Tenant = {
-    ...tenantData,
-    id: `tenant_${Date.now()}`,
-    createdAt: new Date(),
-    updatedAt: new Date()
+  if (error) {
+    console.error('Error creating tenant:', error);
+    throw new Error('Failed to create tenant');
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    subdomain: data.subdomain,
+    status: data.status,
+    proprietorName: data.proprietor_name,
+    phoneNumber: data.phone_number,
+    address: data.address,
+    gstNumber: data.gst_number,
+    plan: data.plan,
+    maxUsers: data.max_users,
+    maxConnections: data.max_connections,
+    settings: data.settings,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
   };
-
-  // In production, this would save to database
-  MOCK_TENANT_DATABASE[tenantData.subdomain] = newTenant;
-
-  return newTenant;
 };
 
-/**
- * Update tenant
- * @param tenantId - The tenant ID to update
- * @param updates - The updates to apply
- * @returns Promise<Tenant> - The updated tenant
- */
 export const updateTenant = async (tenantId: string, updates: Partial<Tenant>): Promise<Tenant> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
+  const updateData: any = {};
 
-  // Find tenant by ID
-  const tenant = Object.values(MOCK_TENANT_DATABASE).find(t => t.id === tenantId);
-  if (!tenant) {
-    throw new Error('Tenant not found');
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.subdomain !== undefined) updateData.subdomain = updates.subdomain.toLowerCase();
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.proprietorName !== undefined) updateData.proprietor_name = updates.proprietorName;
+  if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber;
+  if (updates.address !== undefined) updateData.address = updates.address;
+  if (updates.gstNumber !== undefined) updateData.gst_number = updates.gstNumber;
+  if (updates.plan !== undefined) updateData.plan = updates.plan;
+  if (updates.maxUsers !== undefined) updateData.max_users = updates.maxUsers;
+  if (updates.maxConnections !== undefined) updateData.max_connections = updates.maxConnections;
+  if (updates.settings !== undefined) updateData.settings = updates.settings;
+
+  const { data, error } = await supabase
+    .from('tenants')
+    .update(updateData)
+    .eq('id', tenantId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating tenant:', error);
+    throw new Error('Failed to update tenant');
   }
 
-  const updatedTenant = {
-    ...tenant,
-    ...updates,
-    updatedAt: new Date()
+  return {
+    id: data.id,
+    name: data.name,
+    subdomain: data.subdomain,
+    status: data.status,
+    proprietorName: data.proprietor_name,
+    phoneNumber: data.phone_number,
+    address: data.address,
+    gstNumber: data.gst_number,
+    plan: data.plan,
+    maxUsers: data.max_users,
+    maxConnections: data.max_connections,
+    settings: data.settings,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
   };
-
-  // Update in mock database
-  MOCK_TENANT_DATABASE[tenant.subdomain] = updatedTenant;
-
-  return updatedTenant;
 };
 
-/**
- * Delete tenant
- * @param tenantId - The tenant ID to delete
- * @returns Promise<boolean> - Success status
- */
 export const deleteTenant = async (tenantId: string): Promise<boolean> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
+  const { error } = await supabase
+    .from('tenants')
+    .delete()
+    .eq('id', tenantId);
 
-  // Find tenant by ID
-  const tenant = Object.values(MOCK_TENANT_DATABASE).find(t => t.id === tenantId);
-  if (!tenant) {
-    throw new Error('Tenant not found');
+  if (error) {
+    console.error('Error deleting tenant:', error);
+    throw new Error('Failed to delete tenant');
   }
-
-  // Remove from mock database
-  delete MOCK_TENANT_DATABASE[tenant.subdomain];
 
   return true;
 };

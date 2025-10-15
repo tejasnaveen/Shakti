@@ -1,212 +1,250 @@
 import { CompanyAdmin, CreateAdminRequest, UpdateAdminRequest } from '../types/admin';
+import { supabase } from '../lib/supabase';
+import bcrypt from 'bcryptjs';
 
-// Simple hash function for demo purposes - in production, use bcrypt
 const hashPassword = async (password: string): Promise<string> => {
-  // Simple hash for demo - in production use proper bcrypt
-  return `hashed_${password}_${Date.now()}`;
+  const saltRounds = 10;
+  return await bcrypt.hash(password, saltRounds);
 };
 
-// Mock admin database - In production, this would be a real database
-const MOCK_ADMIN_DATABASE: Record<string, CompanyAdmin> = {
-  'admin_1': {
-    id: 'admin_1',
-    tenantId: 'tenant_1',
-    name: 'Rajesh Kumar',
-    employeeId: 'EMP001',
-    email: 'rajesh.kumar@techcorp.com',
-    status: 'active',
-    role: 'CompanyAdmin',
-    lastLoginAt: new Date('2024-01-15T10:30:00Z'),
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-15'),
-    createdBy: 'superadmin_1'
-  },
-  'admin_2': {
-    id: 'admin_2',
-    tenantId: 'tenant_2',
-    name: 'Priya Sharma',
-    employeeId: 'EMP002',
-    email: 'priya.sharma@globallending.com',
-    status: 'active',
-    role: 'CompanyAdmin',
-    lastLoginAt: new Date('2024-01-14T15:45:00Z'),
-    createdAt: new Date('2024-01-14'),
-    updatedAt: new Date('2024-01-14'),
-    createdBy: 'superadmin_1'
-  },
-  'admin_3': {
-    id: 'admin_3',
-    tenantId: 'tenant_3',
-    name: 'Amit Patel',
-    employeeId: 'EMP003',
-    email: 'amit.patel@quickloans.com',
-    status: 'inactive',
-    role: 'CompanyAdmin',
-    createdAt: new Date('2024-01-13'),
-    updatedAt: new Date('2024-01-13'),
-    createdBy: 'superadmin_1'
-  }
-};
-
-/**
- * Get all admins for a specific tenant
- */
 export const getAdminsByTenantId = async (tenantId: string): Promise<CompanyAdmin[]> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
+  const { data, error } = await supabase
+    .from('company_admins')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
 
-  return Object.values(MOCK_ADMIN_DATABASE).filter(admin => admin.tenantId === tenantId);
+  if (error) {
+    console.error('Error fetching admins by tenant:', error);
+    return [];
+  }
+
+  return data.map((item: any) => ({
+    id: item.id,
+    tenantId: item.tenant_id,
+    name: item.name,
+    employeeId: item.employee_id,
+    email: item.email,
+    status: item.status,
+    role: item.role,
+    lastLoginAt: item.last_login_at ? new Date(item.last_login_at) : undefined,
+    passwordResetToken: item.password_reset_token,
+    passwordResetExpires: item.password_reset_expires ? new Date(item.password_reset_expires) : undefined,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    createdBy: item.created_by
+  }));
 };
 
-/**
- * Get admin by ID
- */
 export const getAdminById = async (adminId: string): Promise<CompanyAdmin | null> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
+  const { data, error } = await supabase
+    .from('company_admins')
+    .select('*')
+    .eq('id', adminId)
+    .maybeSingle();
 
-  return MOCK_ADMIN_DATABASE[adminId] || null;
+  if (error || !data) {
+    console.error('Error fetching admin by ID:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    name: data.name,
+    employeeId: data.employee_id,
+    email: data.email,
+    status: data.status,
+    role: data.role,
+    lastLoginAt: data.last_login_at ? new Date(data.last_login_at) : undefined,
+    passwordResetToken: data.password_reset_token,
+    passwordResetExpires: data.password_reset_expires ? new Date(data.password_reset_expires) : undefined,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
+  };
 };
 
-/**
- * Create new company admin
- */
 export const createAdmin = async (tenantId: string, adminData: CreateAdminRequest): Promise<CompanyAdmin> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  // Hash password
   const passwordHash = await hashPassword(adminData.password);
 
-  const newAdmin: CompanyAdmin = {
-    id: `admin_${Date.now()}`,
-    tenantId,
-    name: adminData.name,
-    employeeId: adminData.employeeId,
-    email: adminData.email,
-    passwordHash,
-    status: adminData.status || 'active',
-    role: 'CompanyAdmin',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    createdBy: 'superadmin_1'
-  };
+  const { data, error } = await supabase
+    .from('company_admins')
+    .insert({
+      tenant_id: tenantId,
+      name: adminData.name,
+      employee_id: adminData.employeeId,
+      email: adminData.email,
+      password_hash: passwordHash,
+      status: adminData.status || 'active',
+      role: 'CompanyAdmin'
+    })
+    .select()
+    .single();
 
-  MOCK_ADMIN_DATABASE[newAdmin.id] = newAdmin;
-  return newAdmin;
+  if (error) {
+    console.error('Error creating admin:', error);
+    throw new Error('Failed to create admin');
+  }
+
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    name: data.name,
+    employeeId: data.employee_id,
+    email: data.email,
+    status: data.status,
+    role: data.role,
+    lastLoginAt: data.last_login_at ? new Date(data.last_login_at) : undefined,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
+  };
 };
 
-/**
- * Update company admin
- */
 export const updateAdmin = async (adminId: string, updates: UpdateAdminRequest): Promise<CompanyAdmin> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
+  const updateData: any = {};
 
-  const admin = MOCK_ADMIN_DATABASE[adminId];
-  if (!admin) {
-    throw new Error('Admin not found');
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.employeeId !== undefined) updateData.employee_id = updates.employeeId;
+  if (updates.email !== undefined) updateData.email = updates.email;
+  if (updates.status !== undefined) updateData.status = updates.status;
+
+  const { data, error } = await supabase
+    .from('company_admins')
+    .update(updateData)
+    .eq('id', adminId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating admin:', error);
+    throw new Error('Failed to update admin');
   }
 
-  const updatedAdmin = {
-    ...admin,
-    ...updates,
-    updatedAt: new Date()
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    name: data.name,
+    employeeId: data.employee_id,
+    email: data.email,
+    status: data.status,
+    role: data.role,
+    lastLoginAt: data.last_login_at ? new Date(data.last_login_at) : undefined,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
   };
-
-  MOCK_ADMIN_DATABASE[adminId] = updatedAdmin;
-  return updatedAdmin;
 };
 
-/**
- * Delete company admin
- */
 export const deleteAdmin = async (adminId: string): Promise<boolean> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
+  const { error } = await supabase
+    .from('company_admins')
+    .delete()
+    .eq('id', adminId);
 
-  if (!MOCK_ADMIN_DATABASE[adminId]) {
-    throw new Error('Admin not found');
+  if (error) {
+    console.error('Error deleting admin:', error);
+    throw new Error('Failed to delete admin');
   }
 
-  delete MOCK_ADMIN_DATABASE[adminId];
   return true;
 };
 
-/**
- * Reset admin password
- */
 export const resetAdminPassword = async (adminId: string): Promise<string> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 200));
-
-  const admin = MOCK_ADMIN_DATABASE[adminId];
-  if (!admin) {
-    throw new Error('Admin not found');
-  }
-
-  // Generate temporary password
   const tempPassword = `TempPass${Math.random().toString(36).slice(-6)}!`;
-
-  // Hash new password
   const passwordHash = await hashPassword(tempPassword);
 
-  // Update admin with new password
-  admin.passwordHash = passwordHash;
-  admin.passwordResetToken = undefined;
-  admin.passwordResetExpires = undefined;
-  admin.updatedAt = new Date();
+  const { error } = await supabase
+    .from('company_admins')
+    .update({
+      password_hash: passwordHash,
+      password_reset_token: null,
+      password_reset_expires: null
+    })
+    .eq('id', adminId);
 
-  MOCK_ADMIN_DATABASE[adminId] = admin;
+  if (error) {
+    console.error('Error resetting password:', error);
+    throw new Error('Failed to reset password');
+  }
+
   return tempPassword;
 };
 
-/**
- * Toggle admin status (active/inactive)
- */
 export const toggleAdminStatus = async (adminId: string): Promise<CompanyAdmin> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 150));
-
-  const admin = MOCK_ADMIN_DATABASE[adminId];
+  const admin = await getAdminById(adminId);
   if (!admin) {
     throw new Error('Admin not found');
   }
 
-  const updatedAdmin: CompanyAdmin = {
-    ...admin,
-    status: admin.status === 'active' ? 'inactive' : 'active',
-    updatedAt: new Date()
+  const newStatus = admin.status === 'active' ? 'inactive' : 'active';
+
+  const { data, error } = await supabase
+    .from('company_admins')
+    .update({ status: newStatus })
+    .eq('id', adminId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error toggling admin status:', error);
+    throw new Error('Failed to toggle admin status');
+  }
+
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    name: data.name,
+    employeeId: data.employee_id,
+    email: data.email,
+    status: data.status,
+    role: data.role,
+    lastLoginAt: data.last_login_at ? new Date(data.last_login_at) : undefined,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    createdBy: data.created_by
   };
-
-  MOCK_ADMIN_DATABASE[adminId] = updatedAdmin;
-  return updatedAdmin;
 };
 
-/**
- * Validate employee ID uniqueness within tenant
- */
 export const isEmployeeIdUnique = async (tenantId: string, employeeId: string, excludeAdminId?: string): Promise<boolean> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 50));
+  let query = supabase
+    .from('company_admins')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('employee_id', employeeId);
 
-  const tenantAdmins = Object.values(MOCK_ADMIN_DATABASE).filter(
-    admin => admin.tenantId === tenantId && admin.id !== excludeAdminId
-  );
+  if (excludeAdminId) {
+    query = query.neq('id', excludeAdminId);
+  }
 
-  return !tenantAdmins.some(admin => admin.employeeId === employeeId);
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error checking employee ID uniqueness:', error);
+    return false;
+  }
+
+  return data.length === 0;
 };
 
-/**
- * Validate email uniqueness within tenant
- */
 export const isEmailUnique = async (tenantId: string, email: string, excludeAdminId?: string): Promise<boolean> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 50));
+  let query = supabase
+    .from('company_admins')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('email', email);
 
-  const tenantAdmins = Object.values(MOCK_ADMIN_DATABASE).filter(
-    admin => admin.tenantId === tenantId && admin.id !== excludeAdminId
-  );
+  if (excludeAdminId) {
+    query = query.neq('id', excludeAdminId);
+  }
 
-  return !tenantAdmins.some(admin => admin.email === email);
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error checking email uniqueness:', error);
+    return false;
+  }
+
+  return data.length === 0;
 };
