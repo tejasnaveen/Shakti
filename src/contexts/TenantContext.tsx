@@ -22,7 +22,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Check if this is the main domain (superadmin access)
         if (isMainDomain(hostname)) {
           console.log('Main domain detected - superadmin access');
-          setTenant(null); // No specific tenant for superadmin
+          setTenant(null);
           setIsLoading(false);
           return;
         }
@@ -32,7 +32,8 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         console.log('Tenant identifier:', tenantIdentifier);
 
         if (!tenantIdentifier) {
-          setError('Invalid subdomain');
+          console.log('No tenant identifier - using default tenant');
+          setTenant(null);
           setIsLoading(false);
           return;
         }
@@ -42,14 +43,16 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         console.log('Tenant data loaded:', tenantData);
 
         if (!tenantData) {
-          setError('Tenant not found');
+          console.log('Tenant not found - using default tenant');
+          setTenant(null);
           setIsLoading(false);
           return;
         }
 
         // Check if tenant is active
         if (tenantData.status !== 'active') {
-          setError('Tenant is not active');
+          console.log('Tenant is not active - using default tenant');
+          setTenant(null);
           setIsLoading(false);
           return;
         }
@@ -57,7 +60,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTenant(tenantData);
       } catch (err) {
         console.error('Error initializing tenant:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load tenant');
+        setTenant(null);
       } finally {
         setIsLoading(false);
       }
