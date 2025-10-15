@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { loginSuperAdmin } from '../services/authService';
 
 interface User {
   id: string;
@@ -20,18 +21,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (username: string, password: string, role: string) => {
     try {
-      // Simplified authentication for development
-      // In production, this should be replaced with proper authentication
-      if (username === 'shaktiadmin' && password === 'Arqpn2492n') {
+      if (role === 'SuperAdmin') {
+        const authenticatedUser = await loginSuperAdmin({ username, password });
         setUser({
-          id: 'admin-' + Date.now(),
-          name: username,
+          id: authenticatedUser.id,
+          name: authenticatedUser.username,
           role: role
         });
         return;
       }
 
-      // For demo purposes, accept any non-empty credentials
       if (username && password && role) {
         setUser({
           id: 'user-' + Date.now(),
