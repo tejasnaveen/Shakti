@@ -1,34 +1,59 @@
 import { Tenant } from '../types/tenant';
 import { supabase } from '../lib/supabase';
 
+const parseWebContainerURL = (hostname: string): string => {
+  const pattern = /^([a-z0-9]+)(?:-[a-z0-9]+)?--\d+--[a-z0-9]+\.local-credentialless\.webcontainer-api\.io$/i;
+  const match = hostname.match(pattern);
+
+  if (match && match[1]) {
+    console.log('[Tenant Detection] WebContainer URL detected:', hostname);
+    console.log('[Tenant Detection] Extracted subdomain:', match[1]);
+    return match[1];
+  }
+
+  const fallbackPattern = /^([a-z0-9]+)/i;
+  const fallbackMatch = hostname.match(fallbackPattern);
+
+  if (fallbackMatch && fallbackMatch[1]) {
+    console.log('[Tenant Detection] Using fallback extraction for:', hostname);
+    console.log('[Tenant Detection] Extracted subdomain:', fallbackMatch[1]);
+    return fallbackMatch[1];
+  }
+
+  console.log('[Tenant Detection] Failed to extract subdomain from WebContainer URL:', hostname);
+  return '';
+};
+
 export const extractSubdomain = (hostname: string): string => {
   const hostnameWithoutPort = hostname.split(':')[0];
+  console.log('[Tenant Detection] Processing hostname:', hostnameWithoutPort);
 
   if (hostnameWithoutPort === 'localhost' || hostnameWithoutPort.includes('127.0.0.1')) {
     const parts = hostnameWithoutPort.split('.');
     if (parts.length > 1 && parts[1] === 'localhost') {
+      console.log('[Tenant Detection] Localhost subdomain detected:', parts[0]);
       return parts[0];
     }
+    console.log('[Tenant Detection] No subdomain in localhost');
     return '';
   }
 
   if (hostnameWithoutPort.includes('.local-credentialless.webcontainer-api.io')) {
-    const match = hostnameWithoutPort.match(/^([a-z0-9-]+)-/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return '';
+    return parseWebContainerURL(hostnameWithoutPort);
   }
 
   if (hostnameWithoutPort.includes('webcontainer')) {
+    console.log('[Tenant Detection] Generic webcontainer URL, no subdomain');
     return '';
   }
 
   const parts = hostnameWithoutPort.split('.');
   if (parts.length > 2) {
+    console.log('[Tenant Detection] Standard subdomain detected:', parts[0]);
     return parts[0];
   }
 
+  console.log('[Tenant Detection] No subdomain detected');
   return '';
 };
 

@@ -15,51 +15,56 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setIsLoading(true);
         setError(null);
 
-        // Get current hostname
         const hostname = window.location.hostname;
-        console.log('Current hostname:', hostname);
+        console.log('[TenantContext] Current hostname:', hostname);
+        console.log('[TenantContext] Full URL:', window.location.href);
 
-        // Check if this is the main domain (superadmin access)
         if (isMainDomain(hostname)) {
-          console.log('Main domain detected - superadmin access');
+          console.log('[TenantContext] Main domain detected - superadmin access');
           setTenant(null);
           setIsLoading(false);
           return;
         }
 
-        // Get tenant identifier from subdomain
         const tenantIdentifier = getTenantIdentifier(hostname);
-        console.log('Tenant identifier:', tenantIdentifier);
+        console.log('[TenantContext] Tenant identifier:', tenantIdentifier);
 
         if (!tenantIdentifier) {
-          console.log('No tenant identifier - using default tenant');
+          console.log('[TenantContext] No tenant identifier found');
+          setError('No tenant subdomain detected in URL');
           setTenant(null);
           setIsLoading(false);
           return;
         }
 
-        // Load tenant data
+        console.log('[TenantContext] Fetching tenant data for subdomain:', tenantIdentifier);
         const tenantData = await getTenantBySubdomain(tenantIdentifier);
-        console.log('Tenant data loaded:', tenantData);
+        console.log('[TenantContext] Tenant data loaded:', tenantData);
 
         if (!tenantData) {
-          console.log('Tenant not found - using default tenant');
+          const errorMsg = `Tenant not found for subdomain: ${tenantIdentifier}`;
+          console.error('[TenantContext]', errorMsg);
+          setError(errorMsg);
           setTenant(null);
           setIsLoading(false);
           return;
         }
 
-        // Check if tenant is active
         if (tenantData.status !== 'active') {
-          console.log('Tenant is not active - using default tenant');
+          const errorMsg = `Tenant "${tenantData.name}" is not active (status: ${tenantData.status})`;
+          console.warn('[TenantContext]', errorMsg);
+          setError(errorMsg);
           setTenant(null);
           setIsLoading(false);
           return;
         }
 
+        console.log('[TenantContext] Tenant loaded successfully:', tenantData.name);
         setTenant(tenantData);
       } catch (err) {
-        console.error('Error initializing tenant:', err);
+        console.error('[TenantContext] Error initializing tenant:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load tenant';
+        setError(errorMessage);
         setTenant(null);
       } finally {
         setIsLoading(false);
