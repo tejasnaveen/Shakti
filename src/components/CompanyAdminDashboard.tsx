@@ -5,12 +5,36 @@ import { employeeService } from '../services/employeeService';
 import { columnConfigService } from '../services/columnConfigService';
 import type { Employee, EmployeeFormData, EmployeeRole } from '../types/employee';
 
+interface User {
+  id: string;
+  name: string;
+  role: string;
+  tenantId?: string;
+  email?: string;
+}
+
 interface CompanyAdminDashboardProps {
-  user: any;
+  user: User;
   onLogout: () => void;
 }
 
 const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onLogout }) => {
+  if (!user.tenantId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-md text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Error: Missing Tenant Context</h2>
+          <p className="text-gray-600 mb-4">Unable to load tenant information. Please log out and log in again.</p>
+          <button
+            onClick={onLogout}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    );
+  }
   const [activeSection, setActiveSection] = useState('dashboard');
   const [showPreview, setShowPreview] = useState(false);
   const [columns, setColumns] = useState([
