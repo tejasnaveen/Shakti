@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from './Layout';
 import { Home, Users, FileText, BarChart3, Settings, TrendingUp, DollarSign, Phone, Clock, Plus, Edit, Trash2, Key, Shield, ShieldOff, UserPlus, UserMinus, X, Save, Eye, EyeOff, CheckCircle, Columns, CircleDot as DragHandleDots2, Download } from 'lucide-react';
 import { employeeService } from '../services/employeeService';
+import { columnConfigService } from '../services/columnConfigService';
 import type { Employee, EmployeeFormData, EmployeeRole } from '../types/employee';
 
 interface CompanyAdminDashboardProps {
@@ -218,16 +219,74 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
     return [...activeDefaults, ...activeCustoms];
   };
 
-  const saveColumnConfiguration = () => {
-    // In a real app, this would save to backend
-    const config = {
-      columns,
-      customColumns,
-      timestamp: new Date().toISOString()
-    };
-    console.log('Saving configuration:', config);
-    // Show success message
-    alert('Column configuration saved successfully!');
+  const loadColumnConfigurations = async () => {
+    try {
+      setIsLoading(true);
+      const configs = await columnConfigService.getColumnConfigurations(user.tenantId);
+
+      if (configs.length === 0) {
+        await columnConfigService.initializeDefaultColumns(user.tenantId);
+        const defaultConfigs = await columnConfigService.getColumnConfigurations(user.tenantId);
+        updateColumnsFromDatabase(defaultConfigs);
+      } else {
+        updateColumnsFromDatabase(configs);
+      }
+    } catch (error) {
+      console.error('Error loading column configurations:', error);
+      alert('Failed to load column configurations');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateColumnsFromDatabase = (configs: any[]) => {
+    const defaultCols = configs.filter(c => !c.is_custom).map((c, idx) => ({
+      columnName: c.column_name,
+      displayName: c.display_name,
+      isActive: c.is_active
+    }));
+
+    const customCols = configs.filter(c => c.is_custom).map((c, idx) => ({
+      columnName: c.column_name,
+      displayName: c.display_name,
+      isActive: c.is_active
+    }));
+
+    setColumns(defaultCols);
+    setCustomColumns(customCols);
+  };
+
+  const saveColumnConfiguration = async () => {
+    try {
+      setIsLoading(true);
+
+      const allColumns = [
+        ...columns.map((col, index) => ({
+          column_name: col.columnName,
+          display_name: col.displayName,
+          is_active: col.isActive,
+          is_custom: false,
+          column_order: index + 1,
+          data_type: 'text'
+        })),
+        ...customColumns.map((col, index) => ({
+          column_name: col.columnName,
+          display_name: col.displayName,
+          is_active: col.isActive,
+          is_custom: true,
+          column_order: columns.length + index + 1,
+          data_type: 'text'
+        }))
+      ];
+
+      await columnConfigService.saveColumnConfigurations(user.tenantId, allColumns);
+      alert('Column configuration saved successfully!');
+    } catch (error) {
+      console.error('Error saving column configuration:', error);
+      alert('Failed to save column configuration');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const menuItems = [
@@ -477,6 +536,9 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
   useEffect(() => {
     if (activeSection === 'employee-management' && user?.tenantId) {
       loadEmployees();
+    }
+    if (activeSection === 'column-management' && user?.tenantId) {
+      loadColumnConfigurations();
     }
   }, [activeSection, roleFilter, user?.tenantId]);
 

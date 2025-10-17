@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './Layout';
+import { columnConfigService } from '../services/columnConfigService';
+import { customerCaseService } from '../services/customerCaseService';
 import {
   Home,
   Phone,
@@ -58,6 +60,9 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [customerCases, setCustomerCases] = useState<any[]>([]);
+  const [columnConfigs, setColumnConfigs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Payment notifications and activity log
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([
@@ -82,23 +87,7 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentCustomer, setPaymentCustomer] = useState<any>(null);
   
-  // Dynamic columns configuration (would come from Company Admin settings)
-  const [activeColumns] = useState([
-    { id: 1, columnName: 'customerName', displayName: 'Customer Name', isActive: true },
-    { id: 2, columnName: 'loanId', displayName: 'Loan ID', isActive: true },
-    { id: 3, columnName: 'loanAmount', displayName: 'Loan Amount', isActive: true },
-    { id: 4, columnName: 'mobileNo', displayName: 'Mobile No', isActive: true },
-    { id: 5, columnName: 'dpd', displayName: 'DPD', isActive: true },
-    { id: 6, columnName: 'outstandingAmount', displayName: 'Outstanding', isActive: true },
-    { id: 7, columnName: 'posAmount', displayName: 'POS Amount', isActive: true },
-    { id: 8, columnName: 'emiAmount', displayName: 'EMI Amount', isActive: true },
-    { id: 9, columnName: 'pendingDues', displayName: 'Pending Dues', isActive: true },
-    { id: 10, columnName: 'paymentLink', displayName: 'Payment Link', isActive: true },
-    { id: 11, columnName: 'branchName', displayName: 'Branch Name', isActive: true },
-    { id: 12, columnName: 'loanType', displayName: 'Loan Type', isActive: true },
-    { id: 13, columnName: 'remarks', displayName: 'Remarks', isActive: false },
-    { id: 14, columnName: 'actions', displayName: 'Actions', isActive: true }
-  ]);
+  // Dynamic columns configuration from Company Admin settings
   const [profileData, setProfileData] = useState({
     name: 'Amit Kumar',
     email: 'amit.kumar@company.com',
@@ -118,6 +107,61 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
   });
   const [isEditing, setIsEditing] = useState(false);
 
+  useEffect(() => {
+    if (user?.tenantId && user?.empId) {
+      if (activeSection === 'customer-cases' || activeSection === 'dashboard') {
+        loadCustomerCases();
+      }
+      loadColumnConfigurations();
+    }
+  }, [user?.tenantId, user?.empId, activeSection]);
+
+  const loadCustomerCases = async () => {
+    try {
+      setIsLoading(true);
+      const cases = await customerCaseService.getCasesByEmployee(user.tenantId, user.empId);
+
+      const formattedCases = cases.map(c => ({
+        id: c.id,
+        customerName: c.customer_name,
+        loanId: c.loan_id,
+        loanAmount: c.loan_amount,
+        mobileNo: c.mobile_no,
+        dpd: c.dpd || 0,
+        outstandingAmount: c.outstanding_amount,
+        posAmount: c.pos_amount,
+        emiAmount: c.emi_amount,
+        pendingDues: c.pending_dues,
+        paymentLink: c.payment_link,
+        address: c.address,
+        sanctionDate: c.sanction_date,
+        lastPaidAmount: c.last_paid_amount,
+        lastPaidDate: c.last_paid_date,
+        alternateNumber: c.alternate_number,
+        email: c.email,
+        branchName: c.branch_name,
+        loanType: c.loan_type,
+        remarks: c.remarks,
+        caseStatus: c.case_status
+      }));
+
+      setCustomerCases(formattedCases);
+    } catch (error) {
+      console.error('Error loading customer cases:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadColumnConfigurations = async () => {
+    try {
+      const configs = await columnConfigService.getActiveColumnConfigurations(user.tenantId);
+      setColumnConfigs(configs);
+    } catch (error) {
+      console.error('Error loading column configurations:', error);
+    }
+  };
+
   const menuItems = [
     { name: 'Dashboard', icon: Home, active: activeSection === 'dashboard', onClick: () => setActiveSection('dashboard') },
     { name: 'My Profile', icon: UserIcon, active: activeSection === 'profile', onClick: () => setActiveSection('profile') },
@@ -127,7 +171,7 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
     { name: 'Settings', icon: Settings, active: activeSection === 'settings', onClick: () => setActiveSection('settings') },
   ];
 
-  const customerCases = [
+  const sampleCases = [
     {
       id: 'LN001234567',
       customerName: 'Rajesh Kumar',
@@ -376,16 +420,30 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedCases = filteredCases.slice(startIndex, startIndex + itemsPerPage);
 
+  const getActiveColumns = () => {
+    const columns = columnConfigs.length > 0
+      ? columnConfigs.map(config => ({
+          id: config.id,
+          columnName: config.column_name,
+          displayName: config.display_name,
+          isActive: config.is_active
+        }))
+      : [];
+
+    columns.push({ id: 999, columnName: 'actions', displayName: 'Actions', isActive: true });
+    return columns;
+  };
+
   const exportToCSV = () => {
-    const activeColumnNames = activeColumns.filter(col => col.isActive && col.columnName !== 'actions');
-    const headers = activeColumnNames.map(col => col.displayName).join(',');
-    const rows = filteredCases.map(case_ => 
-      activeColumnNames.map(col => {
+    const activeColumnsList = getActiveColumns().filter(col => col.isActive && col.columnName !== 'actions');
+    const headers = activeColumnsList.map(col => col.displayName).join(',');
+    const rows = filteredCases.map(case_ =>
+      activeColumnsList.map(col => {
         const value = case_[col.columnName as keyof typeof case_] || '';
         return `"${value}"`;
       }).join(',')
     ).join('\n');
-    
+
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -465,7 +523,7 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600">Assigned Cases</p>
-                    <p className="text-2xl font-bold text-gray-900">47</p>
+                    <p className="text-2xl font-bold text-gray-900">{customerCases.length}</p>
                   </div>
                 </div>
               </div>
@@ -932,7 +990,7 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        {activeColumns.filter(col => col.isActive).map((column) => (
+                        {getActiveColumns().filter(col => col.isActive).map((column) => (
                           <th key={column.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             {column.displayName}
                           </th>
@@ -940,15 +998,29 @@ const TelecallerDashboard: React.FC<TelecallerDashboardProps> = ({ user, onLogou
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {paginatedCases.map((case_, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          {activeColumns.filter(col => col.isActive).map((column) => (
-                            <td key={column.id} className="px-4 py-4 whitespace-nowrap text-sm">
-                              {renderColumnValue(case_, column)}
-                            </td>
-                          ))}
+                      {isLoading ? (
+                        <tr>
+                          <td colSpan={getActiveColumns().length} className="px-4 py-8 text-center text-gray-500">
+                            Loading cases...
+                          </td>
                         </tr>
-                      ))}
+                      ) : paginatedCases.length === 0 ? (
+                        <tr>
+                          <td colSpan={getActiveColumns().length} className="px-4 py-8 text-center text-gray-500">
+                            No cases assigned yet
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedCases.map((case_, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            {getActiveColumns().filter(col => col.isActive).map((column) => (
+                              <td key={column.id} className="px-4 py-4 whitespace-nowrap text-sm">
+                                {renderColumnValue(case_, column)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

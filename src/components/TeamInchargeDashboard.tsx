@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './Layout';
+import { columnConfigService } from '../services/columnConfigService';
+import { customerCaseService } from '../services/customerCaseService';
+import { employeeService } from '../services/employeeService';
+import { excelUtils } from '../utils/excelUtils';
 import { 
   Home, 
   Users, 
@@ -38,6 +42,11 @@ const TeamInchargeDashboard: React.FC<TeamInchargeDashboardProps> = ({ user, onL
     department: '',
     product: ''
   });
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [columnConfigs, setColumnConfigs] = useState<any[]>([]);
 
   const teamMembers = [
     {
@@ -144,6 +153,145 @@ const TeamInchargeDashboard: React.FC<TeamInchargeDashboardProps> = ({ user, onL
     'Business Loan',
     'Credit Card'
   ];
+
+  useEffect(() => {
+    if (user?.tenantId) {
+      loadColumnConfigurations();
+    }
+  }, [user?.tenantId]);
+
+  const loadColumnConfigurations = async () => {
+    try {
+      const configs = await columnConfigService.getActiveColumnConfigurations(user.tenantId);
+      setColumnConfigs(configs);
+    } catch (error) {
+      console.error('Error loading column configurations:', error);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      if (columnConfigs.length === 0) {
+        alert('Loading column configurations. Please try again in a moment.');
+        await loadColumnConfigurations();
+        return;
+      }
+
+      excelUtils.generateTemplate(columnConfigs);
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      alert('Failed to download template');
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        alert('Please select a valid Excel file (.xlsx or .xls)');
+        return;
+      }
+      setUploadFile(file);
+      setUploadStatus('');
+    }
+  };
+
+  const handleUploadCases = async () => {
+    if (!uploadFile) {
+      alert('Please select a file first');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setUploadProgress(10);
+      setUploadStatus('Parsing Excel file...');
+
+      const rows = await excelUtils.parseExcelFile(uploadFile, columnConfigs);
+
+      setUploadProgress(30);
+      setUploadStatus('Validating data...');
+
+      const validRows: any[] = [];
+      const errors: string[] = [];
+
+      rows.forEach((row, index) => {
+        const validation = excelUtils.validateCaseData(row, columnConfigs);
+        if (validation.valid) {
+          validRows.push(row);
+        } else {
+          errors.push(`Row ${index + 2}: ${validation.errors.join(', ')}`);
+        }
+      });
+
+      if (validRows.length === 0) {
+        alert('No valid rows found in the Excel file.\n\nErrors:\n' + errors.slice(0, 10).join('\n'));
+        setIsUploading(false);
+        return;
+      }
+
+      setUploadProgress(50);
+      setUploadStatus(`Processing ${validRows.length} valid cases...`);
+
+      const employees = await employeeService.getEmployees(user.tenantId, 'All');
+
+      setUploadProgress(60);
+      const casesToInsert = validRows.map(row => ({
+        tenant_id: user.tenantId,
+        assigned_employee_id: row.EMPID,
+        loan_id: row.loanId || '',
+        customer_name: row.customerName || '',
+        mobile_no: row.mobileNo || '',
+        loan_amount: row.loanAmount || '',
+        loan_type: row.loanType || '',
+        outstanding_amount: row.outstandingAmount || '',
+        pos_amount: row.posAmount || '',
+        emi_amount: row.emiAmount || '',
+        pending_dues: row.pendingDues || '',
+        dpd: row.dpd ? parseInt(row.dpd) : 0,
+        branch_name: row.branchName || '',
+        address: row.address || '',
+        sanction_date: row.sanctionDate || null,
+        last_paid_date: row.lastPaidDate || null,
+        last_paid_amount: row.lastPaidAmount || '',
+        payment_link: row.paymentLink || '',
+        remarks: row.remarks || '',
+        case_status: 'pending',
+        uploaded_by: user.id
+      }));
+
+      setUploadProgress(80);
+      setUploadStatus('Uploading cases to database...');
+
+      await customerCaseService.bulkCreateCases(casesToInsert);
+
+      setUploadProgress(100);
+      setUploadStatus(`Successfully uploaded ${validRows.length} cases!`);
+
+      const employeeCounts: Record<string, number> = {};
+      validRows.forEach(row => {
+        employeeCounts[row.EMPID] = (employeeCounts[row.EMPID] || 0) + 1;
+      });
+
+      const summary = Object.entries(employeeCounts)
+        .map(([empId, count]) => `${empId}: ${count} cases`)
+        .join('\n');
+
+      alert(`Upload successful!\n\nCases uploaded by employee:\n${summary}\n\n${errors.length > 0 ? `\nErrors found in ${errors.length} rows (skipped)` : ''}`);
+
+      setUploadFile(null);
+      setUploadProgress(0);
+
+      const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    } catch (error) {
+      console.error('Error uploading cases:', error);
+      alert('Failed to upload cases: ' + (error as Error).message);
+    } finally {
+      setIsUploading(false);
+      setUploadStatus('');
+    }
+  };
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -406,37 +554,65 @@ const TeamInchargeDashboard: React.FC<TeamInchargeDashboardProps> = ({ user, onL
                     <div className="space-y-4">
                       <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center">
                         <FileText className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                        <p className="text-sm text-gray-600 mb-4">Select Excel file to upload cases</p>
+                        {uploadFile ? (
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 mb-2">{uploadFile.name}</p>
+                            <p className="text-xs text-gray-600">File selected successfully</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600 mb-4">Select Excel file to upload cases</p>
+                        )}
                         <input
                           type="file"
                           accept=".xlsx,.xls"
                           className="hidden"
                           id="excel-upload"
+                          onChange={handleFileSelect}
+                          disabled={isUploading}
                         />
                         <label
                           htmlFor="excel-upload"
-                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer inline-flex items-center"
+                          className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer inline-flex items-center ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           <FileText className="w-4 h-4 mr-2" />
-                          Select File
+                          {uploadFile ? 'Change File' : 'Select File'}
                         </label>
                       </div>
-                      <button className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium">
-                        Upload & Process
+                      {uploadProgress > 0 && (
+                        <div className="space-y-2">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-sm text-gray-600 text-center">{uploadStatus}</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={handleUploadCases}
+                        disabled={!uploadFile || isUploading}
+                        className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        {isUploading ? 'Uploading...' : 'Upload & Process'}
                       </button>
                     </div>
                   </div>
                   
                   <div className="bg-yellow-50 rounded-lg p-6">
                     <h4 className="font-medium text-gray-900 mb-4">Download Sample Template</h4>
-                    <p className="text-sm text-gray-600 mb-4">Download the sample Excel template with proper column structure</p>
-                    <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
+                    <p className="text-sm text-gray-600 mb-4">Download the sample Excel template with proper column structure based on active columns configured by Company Admin</p>
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
                       Download Sample Excel
                     </button>
                     <div className="mt-4 text-xs text-gray-500">
-                      <p className="font-medium mb-2">Required Columns:</p>
-                      <p>Customer Name, Loan ID, Loan Amount, Mobile No, DPD, Outstanding Amount, POS Amount, EMI Amount, Pending Dues, Address, Sanction Date, Last Paid Amount & Date, Payment Link</p>
+                      <p className="font-medium mb-2">Template includes:</p>
+                      <p>EMPID column (required) + all active columns configured by your Company Admin</p>
+                      <p className="mt-2 text-blue-600">Active columns: {columnConfigs.length > 0 ? columnConfigs.length : 'Loading...'}</p>
                     </div>
                   </div>
                 </div>
