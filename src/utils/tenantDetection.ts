@@ -3,15 +3,28 @@ import { supabase } from '../lib/supabase';
 
 export const extractSubdomain = (hostname: string): string => {
   const hostnameWithoutPort = hostname.split(':')[0];
-  const parts = hostnameWithoutPort.split('.');
 
   if (hostnameWithoutPort === 'localhost' || hostnameWithoutPort.includes('127.0.0.1')) {
+    const parts = hostnameWithoutPort.split('.');
     if (parts.length > 1 && parts[1] === 'localhost') {
       return parts[0];
     }
     return '';
   }
 
+  if (hostnameWithoutPort.includes('.local-credentialless.webcontainer-api.io')) {
+    const match = hostnameWithoutPort.match(/^([a-z0-9-]+)-/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return '';
+  }
+
+  if (hostnameWithoutPort.includes('webcontainer')) {
+    return '';
+  }
+
+  const parts = hostnameWithoutPort.split('.');
   if (parts.length > 2) {
     return parts[0];
   }

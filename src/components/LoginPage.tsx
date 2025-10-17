@@ -1,15 +1,23 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { User, Building, Users, Phone, Zap, Shield, TrendingUp } from 'lucide-react';
+import { User, Building, Users, Phone, Zap, Shield, TrendingUp, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTenant } from '../contexts/TenantContext';
 
 const LoginPage: React.FC = () => {
   const { login, isAuthenticated } = useAuth();
+  const { tenant } = useTenant();
   const [selectedRole, setSelectedRole] = React.useState('SuperAdmin');
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (tenant) {
+      setSelectedRole('CompanyAdmin');
+    }
+  }, [tenant]);
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
@@ -101,9 +109,36 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div className="max-w-md mx-auto">
-          {/* Role Toggle Buttons */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 p-6 mb-6 relative z-10">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Select Role</h3>
+          {tenant && (
+            <div className="bg-blue-50/80 backdrop-blur-sm rounded-xl shadow-xl border border-blue-200 p-4 mb-6 relative z-10">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-500 rounded-lg p-2">
+                  <Building className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-blue-600 font-medium">Logging in to</p>
+                  <p className="text-lg font-bold text-blue-900">{tenant.name}</p>
+                  <p className="text-xs text-blue-600 font-mono">{tenant.subdomain}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedRole === 'SuperAdmin' && tenant && (
+            <div className="bg-yellow-50/80 backdrop-blur-sm rounded-xl shadow-xl border border-yellow-200 p-4 mb-6 relative z-10">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-yellow-800">Wrong Access Point</p>
+                  <p className="text-yellow-700">Super Admin should login from the main domain, not a company subdomain.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!tenant && (
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 p-6 mb-6 relative z-10">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Select Role</h3>
             <div className="relative bg-gray-100/80 rounded-full p-1 backdrop-blur-sm">
               {/* Sliding Background */}
               <div 
@@ -136,7 +171,8 @@ const LoginPage: React.FC = () => {
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Login Form */}
           <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 p-8 relative z-10">

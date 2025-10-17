@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './Layout';
-import { Home, Users, FileText, BarChart3, Settings, TrendingUp, DollarSign, Phone, Clock, Plus, Edit, Trash2, Key, Shield, ShieldOff, UserPlus, UserMinus, X, Save, Eye, EyeOff, CheckCircle, Columns, CircleDot as DragHandleDots2, Download } from 'lucide-react';
+import { Home, Users, FileText, BarChart3, Settings, TrendingUp, DollarSign, Phone, Clock, Plus, Edit, Trash2, Key, Shield, ShieldOff, UserPlus, UserMinus, X, Save, Eye, EyeOff, CheckCircle, Columns, CircleDot as DragHandleDots2, Download, Globe, Copy } from 'lucide-react';
 import { employeeService } from '../services/employeeService';
 import { columnConfigService } from '../services/columnConfigService';
+import { useTenant } from '../contexts/TenantContext';
+import { getDomainConfig } from '../config/domain';
 import type { Employee, EmployeeFormData, EmployeeRole } from '../types/employee';
 
 interface User {
@@ -19,6 +21,8 @@ interface CompanyAdminDashboardProps {
 }
 
 const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onLogout }) => {
+  const { tenant } = useTenant();
+
   if (!user.tenantId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -1448,6 +1452,127 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
           </div>
         );
       
+      case 'settings':
+        return (
+          <div className="space-y-6">
+            {/* Company Information */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                <Settings className="w-5 h-5 mr-2 text-blue-600" />
+                Company Settings
+              </h3>
+
+              {tenant && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Name
+                      </label>
+                      <p className="text-gray-900 bg-gray-50 px-4 py-3 rounded-lg font-medium">
+                        {tenant.name}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <div className="flex items-center">
+                        <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
+                          tenant.status === 'active'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {tenant.status.charAt(0).toUpperCase() + tenant.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Globe className="w-4 h-4 mr-2 text-blue-600" />
+                      Company Subdomain
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex-1 flex items-center bg-blue-50 px-4 py-3 rounded-lg border border-blue-200">
+                        <Globe className="w-5 h-5 text-blue-600 mr-3" />
+                        <span className="text-gray-900 font-mono text-sm break-all flex-1">
+                          {getDomainConfig().getFullSubdomainUrl(tenant.subdomain)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(getDomainConfig().getFullSubdomainUrl(tenant.subdomain));
+                          alert('Subdomain URL copied to clipboard!');
+                        }}
+                        className="p-3 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+                        title="Copy subdomain URL"
+                      >
+                        <Copy className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Share this URL with your team members to access their login portal
+                    </p>
+                  </div>
+
+                  {(tenant.proprietorName || tenant.phoneNumber || tenant.address) && (
+                    <div className="pt-4 border-t border-gray-200">
+                      <h4 className="text-md font-semibold text-gray-900 mb-4">Contact Information</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {tenant.proprietorName && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                              Proprietor Name
+                            </label>
+                            <p className="text-gray-900">{tenant.proprietorName}</p>
+                          </div>
+                        )}
+                        {tenant.phoneNumber && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                              Phone Number
+                            </label>
+                            <p className="text-gray-900">{tenant.phoneNumber}</p>
+                          </div>
+                        )}
+                        {tenant.address && (
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                              Address
+                            </label>
+                            <p className="text-gray-900">{tenant.address}</p>
+                          </div>
+                        )}
+                        {tenant.gstNumber && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                              GST Number
+                            </label>
+                            <p className="text-gray-900 font-mono text-sm">{tenant.gstNumber}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!tenant && (
+                <p className="text-gray-500">Loading company information...</p>
+              )}
+            </div>
+
+            {/* System Settings Placeholder */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">System Preferences</h3>
+              <p className="text-gray-600">Additional settings and preferences will be available here.</p>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="space-y-6">

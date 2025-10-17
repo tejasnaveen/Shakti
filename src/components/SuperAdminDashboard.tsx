@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Layout from './Layout';
 import CompanyProfile from './CompanyProfile';
 import { useTenant } from '../contexts/TenantContext';
 import { getAllTenants, createTenant, updateTenant, deleteTenant } from '../utils/tenantDetection';
 import { getAdminsByTenantId, createAdmin, updateAdmin, deleteAdmin, resetAdminPassword, toggleAdminStatus } from '../utils/adminManagement';
+import { checkSubdomainAvailability } from '../services/subdomainService';
+import { sanitizeSubdomain } from '../utils/subdomainValidation';
+import { getDomainConfig } from '../config/domain';
 import { Tenant } from '../types/tenant';
 import { CompanyAdmin, CreateAdminRequest, UpdateAdminRequest } from '../types/admin';
 import {
@@ -26,7 +29,12 @@ import {
   Globe,
   User,
   Shield,
-  Key
+  Key,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -199,6 +207,10 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
     address: '',
     gstNumber: ''
   });
+  const [subdomainCheckStatus, setSubdomainCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [subdomainError, setSubdomainError] = useState<string>('');
+  const [subdomainSuggestions, setSubdomainSuggestions] = useState<string[]>([]);
+  const [checkTimeout, setCheckTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Load tenants on component mount
   useEffect(() => {
@@ -337,6 +349,56 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
       address: '',
       gstNumber: ''
     });
+    setSubdomainCheckStatus('idle');
+    setSubdomainError('');
+    setSubdomainSuggestions([]);
+    if (checkTimeout) {
+      clearTimeout(checkTimeout);
+      setCheckTimeout(null);
+    }
+  };
+
+  const handleSubdomainChange = useCallback((value: string) => {
+    const sanitized = sanitizeSubdomain(value);
+    setNewTenant(prev => ({ ...prev, subdomain: sanitized }));
+    setSubdomainSuggestions([]);
+
+    if (checkTimeout) {
+      clearTimeout(checkTimeout);
+    }
+
+    if (!sanitized || sanitized.length < 3) {
+      setSubdomainCheckStatus('idle');
+      setSubdomainError('');
+      return;
+    }
+
+    setSubdomainCheckStatus('checking');
+    setSubdomainError('');
+
+    const timeout = setTimeout(async () => {
+      const result = await checkSubdomainAvailability(sanitized);
+
+      if (result.valid && result.available) {
+        setSubdomainCheckStatus('available');
+        setSubdomainError('');
+      } else if (!result.valid) {
+        setSubdomainCheckStatus('invalid');
+        setSubdomainError(result.error || 'Invalid subdomain format');
+      } else if (!result.available) {
+        setSubdomainCheckStatus('taken');
+        setSubdomainError(result.error || 'Subdomain is already taken');
+        if (result.suggestions) {
+          setSubdomainSuggestions(result.suggestions);
+        }
+      }
+    }, 500);
+
+    setCheckTimeout(timeout);
+  }, [checkTimeout]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
 
   // Tenant management functions
@@ -344,6 +406,11 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
     try {
       if (!newTenant.name || !newTenant.subdomain) {
         alert('Please fill in all required fields (Company Name and Subdomain)');
+        return;
+      }
+
+      if (subdomainCheckStatus !== 'available') {
+        alert('Please enter a valid and available subdomain');
         return;
       }
 
@@ -559,7 +626,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
                   }`}></div>
                   <div>
                     <h4 className="font-semibold text-gray-900">{tenant.name}</h4>
-                    <p className="text-sm text-gray-600">{tenant.subdomain}.yourapp.com</p>
+                    <p className="text-sm text-gray-600 font-mono">{tenant.subdomain}.{getDomainConfig().baseDomain}</p>
                   </div>
                 </div>
                 <StatusBadge status={tenant.plan || 'basic'} type="plan" />
@@ -887,17 +954,86 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Subdomain *
                 </label>
-                <div className="flex">
-                  <input
-                    type="text"
-                    value={newTenant.subdomain || ''}
-                    onChange={(e) => setNewTenant({ ...newTenant, subdomain: e.target.value.toLowerCase() })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="companyname"
-                  />
-                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600">
-                    .yourapp.com
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex">
+                    <input
+                      type="text"
+                      value={newTenant.subdomain || ''}
+                      onChange={(e) => handleSubdomainChange(e.target.value)}
+                      disabled={!!editingTenant}
+                      className={`flex-1 px-3 py-2 border rounded-l-lg focus:ring-2 focus:border-transparent transition-colors ${
+                        editingTenant
+                          ? 'bg-gray-100 cursor-not-allowed border-gray-300'
+                          : subdomainCheckStatus === 'available'
+                          ? 'border-green-500 focus:ring-green-500'
+                          : subdomainCheckStatus === 'taken' || subdomainCheckStatus === 'invalid'
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
+                      placeholder="companyname"
+                    />
+                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 text-gray-600 flex items-center">
+                      .{getDomainConfig().baseDomain}
+                    </span>
+                    <div className="ml-2 flex items-center justify-center w-10">
+                      {subdomainCheckStatus === 'checking' && (
+                        <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                      )}
+                      {subdomainCheckStatus === 'available' && (
+                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      )}
+                      {(subdomainCheckStatus === 'taken' || subdomainCheckStatus === 'invalid') && (
+                        <XCircle className="w-5 h-5 text-red-500" />
+                      )}
+                    </div>
+                  </div>
+
+                  {subdomainCheckStatus === 'available' && (
+                    <div className="flex items-start space-x-2 text-xs text-green-700 bg-green-50 p-2 rounded-lg">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">Subdomain is available!</p>
+                        <p className="text-green-600 mt-1 font-mono break-all">
+                          {getDomainConfig().getFullSubdomainUrl(newTenant.subdomain || '')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(subdomainCheckStatus === 'taken' || subdomainCheckStatus === 'invalid') && subdomainError && (
+                    <div className="text-xs text-red-700 bg-red-50 p-2 rounded-lg">
+                      <p className="font-medium">{subdomainError}</p>
+                      {subdomainSuggestions.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-red-600 mb-1">Try these alternatives:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {subdomainSuggestions.map((suggestion) => (
+                              <button
+                                key={suggestion}
+                                type="button"
+                                onClick={() => handleSubdomainChange(suggestion)}
+                                className="px-2 py-1 bg-white text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors text-xs"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {editingTenant && (
+                    <p className="text-xs text-gray-500">
+                      Subdomain cannot be changed after creation
+                    </p>
+                  )}
+
+                  {!editingTenant && subdomainCheckStatus === 'idle' && (
+                    <p className="text-xs text-gray-500">
+                      Enter at least 3 characters (lowercase letters, numbers, hyphens only)
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1037,7 +1173,30 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Subdomain
                   </label>
-                  <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{viewingTenant.subdomain}.yourapp.com</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="flex-1 text-gray-900 bg-gray-50 px-3 py-2 rounded-lg font-mono text-sm break-all">
+                      {getDomainConfig().getFullSubdomainUrl(viewingTenant.subdomain)}
+                    </p>
+                    <button
+                      onClick={() => {
+                        copyToClipboard(getDomainConfig().getFullSubdomainUrl(viewingTenant.subdomain));
+                        alert('Subdomain URL copied to clipboard!');
+                      }}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Copy subdomain URL"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <a
+                      href={getDomainConfig().getLoginUrl(viewingTenant.subdomain)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
               </div>
 
