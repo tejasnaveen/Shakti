@@ -626,7 +626,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
                   }`}></div>
                   <div>
                     <h4 className="font-semibold text-gray-900">{tenant.name}</h4>
-                    <p className="text-sm text-gray-600 font-mono">{tenant.subdomain}.{getDomainConfig().baseDomain}</p>
+                    <p className="text-sm text-gray-600 font-mono">{getDomainConfig().getDisplayDomain(tenant.subdomain)}</p>
                   </div>
                 </div>
                 <StatusBadge status={tenant.plan || 'basic'} type="plan" />
@@ -658,6 +658,27 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
               </div>
 
               <div className="flex space-x-2">
+                <button
+                  onClick={() => {
+                    const fullUrl = getDomainConfig().getFullSubdomainUrl(tenant.subdomain);
+                    navigator.clipboard.writeText(fullUrl);
+                    alert(`Copied to clipboard: ${fullUrl}`);
+                  }}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded-lg flex items-center justify-center"
+                  title="Copy subdomain URL"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    const fullUrl = getDomainConfig().getFullSubdomainUrl(tenant.subdomain);
+                    window.open(fullUrl, '_blank');
+                  }}
+                  className="bg-green-50 hover:bg-green-100 text-green-600 px-3 py-2 rounded-lg flex items-center justify-center"
+                  title="Open subdomain"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => {
                     setEditingTenant(tenant);
@@ -972,8 +993,8 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
                       }`}
                       placeholder="companyname"
                     />
-                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 text-gray-600 flex items-center">
-                      .{getDomainConfig().baseDomain}
+                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 text-gray-600 flex items-center text-xs">
+                      {getDomainConfig().currentHost.includes('webcontainer-api.io') ? '-' : '.'}{getDomainConfig().baseDomain}
                     </span>
                     <div className="ml-2 flex items-center justify-center w-10">
                       {subdomainCheckStatus === 'checking' && (
