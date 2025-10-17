@@ -40,22 +40,27 @@ export const employeeService = {
     }
   },
 
-  async createEmployee(tenantId: string, createdBy: string, employeeData: CreateEmployeeRequest): Promise<Employee> {
+  async createEmployee(tenantId: string, createdBy: string | null, employeeData: CreateEmployeeRequest): Promise<Employee> {
     try {
       const passwordHash = await bcrypt.hash(employeeData.password, 10);
 
+      const insertData: any = {
+        tenant_id: tenantId,
+        name: employeeData.name,
+        mobile: employeeData.mobile,
+        emp_id: employeeData.empId,
+        password_hash: passwordHash,
+        role: employeeData.role,
+        status: 'active',
+      };
+
+      if (createdBy && createdBy.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        insertData.created_by = createdBy;
+      }
+
       const { data, error } = await supabase
         .from('employees')
-        .insert({
-          tenant_id: tenantId,
-          name: employeeData.name,
-          mobile: employeeData.mobile,
-          emp_id: employeeData.empId,
-          password_hash: passwordHash,
-          role: employeeData.role,
-          status: 'active',
-          created_by: createdBy,
-        })
+        .insert(insertData)
         .select()
         .single();
 
