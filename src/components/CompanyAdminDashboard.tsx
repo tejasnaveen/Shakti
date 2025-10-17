@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './Layout';
 import { Home, Users, FileText, BarChart3, Settings, TrendingUp, DollarSign, Phone, Clock, Plus, Edit, Trash2, Key, Shield, ShieldOff, UserPlus, UserMinus, X, Save, Eye, EyeOff, CheckCircle, Columns, CircleDot as DragHandleDots2, Download } from 'lucide-react';
+import { employeeService } from '../services/employeeService';
+import type { Employee, EmployeeFormData, EmployeeRole } from '../types/employee';
 
 interface CompanyAdminDashboardProps {
   user: any;
@@ -32,15 +34,25 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
     isActive: true
   });
   const [activeReportTab, setActiveReportTab] = useState('daily');
-  const [showAddTeamInchargeModal, setShowAddTeamInchargeModal] = useState(false);
-  const [showAddTelecallerModal, setShowAddTelecallerModal] = useState(false);
-  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
-  const [editingTeamIncharge, setEditingTeamIncharge] = useState<any>(null);
-  const [editingTelecaller, setEditingTelecaller] = useState<any>(null);
-  const [editingTeam, setEditingTeam] = useState<any>(null);
+  const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+  const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [roleFilter, setRoleFilter] = useState<string>('All');
+  const [isLoading, setIsLoading] = useState(false);
+  const [tempPassword, setTempPassword] = useState<string>('');
+  const [showTempPasswordModal, setShowTempPasswordModal] = useState(false);
 
-  // Sample data
+  const [employeeFormData, setEmployeeFormData] = useState<EmployeeFormData>({
+    name: '',
+    mobile: '',
+    empId: '',
+    password: '',
+    role: 'Telecaller',
+  });
+
+  // Sample data - keeping for other sections
   const [teamIncharges, setTeamIncharges] = useState([
     {
       id: 1,
@@ -220,9 +232,7 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
 
   const menuItems = [
     { name: 'Dashboard', icon: Home, active: activeSection === 'dashboard', onClick: () => setActiveSection('dashboard') },
-    { name: 'Team Management', icon: Users, active: activeSection === 'team-management', onClick: () => setActiveSection('team-management') },
-    { name: 'Telecaller Management', icon: Phone, active: activeSection === 'telecaller-management', onClick: () => setActiveSection('telecaller-management') },
-    { name: 'Team Assignment', icon: Users, active: activeSection === 'team-assignment', onClick: () => setActiveSection('team-assignment') },
+    { name: 'Employee Management', icon: Users, active: activeSection === 'employee-management', onClick: () => setActiveSection('employee-management') },
     { name: 'Column Management', icon: Columns, active: activeSection === 'column-management', onClick: () => setActiveSection('column-management') },
     { name: 'Cases', icon: FileText, active: activeSection === 'cases', onClick: () => setActiveSection('cases') },
     { name: 'Reports', icon: FileText, active: activeSection === 'reports', onClick: () => setActiveSection('reports') },
@@ -464,6 +474,144 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
     downloadAnchorNode.remove();
   };
 
+  useEffect(() => {
+    if (activeSection === 'employee-management' && user?.tenantId) {
+      loadEmployees();
+    }
+  }, [activeSection, roleFilter, user?.tenantId]);
+
+  const loadEmployees = async () => {
+    try {
+      setIsLoading(true);
+      const data = await employeeService.getEmployees(user.tenantId, roleFilter);
+      setEmployees(data);
+    } catch (error) {
+      console.error('Error loading employees:', error);
+      alert('Failed to load employees');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetEmployeeForm = () => {
+    setEmployeeFormData({
+      name: '',
+      mobile: '',
+      empId: '',
+      password: '',
+      role: 'Telecaller',
+    });
+  };
+
+  const handleAddEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      await employeeService.createEmployee(user.tenantId, user.id, employeeFormData);
+      setShowAddEmployeeModal(false);
+      resetEmployeeForm();
+      await loadEmployees();
+      alert('Employee added successfully!');
+    } catch (error) {
+      console.error('Error adding employee:', error);
+      alert('Failed to add employee. Please check if EMP ID is unique.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openEditEmployeeModal = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setEmployeeFormData({
+      name: employee.name,
+      mobile: employee.mobile,
+      empId: employee.empId,
+      password: '',
+      role: employee.role,
+    });
+    setShowEditEmployeeModal(true);
+  };
+
+  const handleEditEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    try {
+      setIsLoading(true);
+      await employeeService.updateEmployee(editingEmployee.id, {
+        name: employeeFormData.name,
+        mobile: employeeFormData.mobile,
+        empId: employeeFormData.empId,
+        role: employeeFormData.role,
+      });
+      setShowEditEmployeeModal(false);
+      setEditingEmployee(null);
+      resetEmployeeForm();
+      await loadEmployees();
+      alert('Employee updated successfully!');
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      alert('Failed to update employee');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteEmployee = async (employeeId: string, employeeName: string) => {
+    if (!window.confirm(`Are you sure you want to delete ${employeeName}?`)) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await employeeService.deleteEmployee(employeeId);
+      await loadEmployees();
+      alert('Employee deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      alert('Failed to delete employee');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (employeeId: string, employeeName: string) => {
+    if (!window.confirm(`Reset password for ${employeeName}?`)) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const newPassword = await employeeService.resetEmployeePassword(employeeId);
+      setTempPassword(newPassword);
+      setShowTempPasswordModal(true);
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      alert('Failed to reset password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleEmployeeStatus = async (employee: Employee) => {
+    try {
+      setIsLoading(true);
+      await employeeService.toggleEmployeeStatus(employee.id, employee.status);
+      await loadEmployees();
+      alert(`Employee ${employee.status === 'active' ? 'blocked' : 'unblocked'} successfully!`);
+    } catch (error) {
+      console.error('Error toggling status:', error);
+      alert('Failed to update employee status');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('Password copied to clipboard!');
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
@@ -576,204 +724,159 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
           </div>
         );
       
-      case 'team-management':
+      case 'employee-management':
         return (
           <div>
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Team Incharge Management</h3>
-                  <p className="text-sm text-gray-600 mt-1">Manage team incharges and their assignments</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Employee Management</h3>
+                  <p className="text-sm text-gray-600 mt-1">Manage all employees with role-based filtering</p>
                 </div>
-                <button 
-                  onClick={() => setShowAddTeamInchargeModal(true)}
+                <button
+                  onClick={() => setShowAddEmployeeModal(true)}
                   className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Team Incharge
+                  Add Employee
                 </button>
               </div>
             </div>
-            
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Telecallers</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {teamIncharges.map((teamIncharge) => (
-                      <tr key={teamIncharge.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{teamIncharge.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{teamIncharge.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{teamIncharge.mobile}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{teamIncharge.teamName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{teamIncharge.assignedTelecallers}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            teamIncharge.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {teamIncharge.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => openEditTeamInchargeModal(teamIncharge)}
-                              className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                            >
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTeamIncharge(teamIncharge.id)}
-                              className="text-red-600 hover:text-red-900 inline-flex items-center"
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Delete
-                            </button>
-                            <button className="text-gray-600 hover:text-gray-900 inline-flex items-center">
-                              <Key className="w-4 h-4 mr-1" />
-                              Reset Password
-                            </button>
-                            <button
-                              onClick={() => handleToggleTeamInchargeStatus(teamIncharge.id)}
-                              className={`inline-flex items-center ${
-                                teamIncharge.status === 'Active' 
-                                  ? 'text-red-600 hover:text-red-900' 
-                                  : 'text-green-600 hover:text-green-900'
-                              }`}
-                            >
-                              {teamIncharge.status === 'Active' ? (
-                                <>
-                                  <ShieldOff className="w-4 h-4 mr-1" />
-                                  Block
-                                </>
-                              ) : (
-                                <>
-                                  <Shield className="w-4 h-4 mr-1" />
-                                  Unblock
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
 
-      case 'telecaller-management':
-        return (
-          <div>
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Telecaller Management</h3>
-                  <p className="text-sm text-gray-600 mt-1">Manage telecallers and their team assignments</p>
-                </div>
-                <button 
-                  onClick={() => setShowAddTelecallerModal(true)}
-                  className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center"
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setRoleFilter('All')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    roleFilter === 'All'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Telecaller
+                  All Employees
+                </button>
+                <button
+                  onClick={() => setRoleFilter('TeamIncharge')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    roleFilter === 'TeamIncharge'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Team Incharge
+                </button>
+                <button
+                  onClick={() => setRoleFilter('Telecaller')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    roleFilter === 'Telecaller'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Telecaller
                 </button>
               </div>
             </div>
-            
+
             <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Incharge</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {telecallers.map((telecaller) => (
-                      <tr key={telecaller.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{telecaller.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{telecaller.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{telecaller.mobile}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{telecaller.assignedIncharge}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{telecaller.teamName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            telecaller.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {telecaller.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => openEditTelecallerModal(telecaller)}
-                              className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                            >
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTelecaller(telecaller.id)}
-                              className="text-red-600 hover:text-red-900 inline-flex items-center"
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Delete
-                            </button>
-                            <button className="text-gray-600 hover:text-gray-900 inline-flex items-center">
-                              <Key className="w-4 h-4 mr-1" />
-                              Reset Password
-                            </button>
-                            <button
-                              onClick={() => handleToggleTelecallerStatus(telecaller.id)}
-                              className={`inline-flex items-center ${
-                                telecaller.status === 'Active' 
-                                  ? 'text-red-600 hover:text-red-900' 
-                                  : 'text-green-600 hover:text-green-900'
-                              }`}
-                            >
-                              {telecaller.status === 'Active' ? (
-                                <>
-                                  <ShieldOff className="w-4 h-4 mr-1" />
-                                  Block
-                                </>
-                              ) : (
-                                <>
-                                  <Shield className="w-4 h-4 mr-1" />
-                                  Unblock
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </td>
+              {isLoading ? (
+                <div className="flex items-center justify-center p-12">
+                  <div className="text-gray-500">Loading employees...</div>
+                </div>
+              ) : employees.length === 0 ? (
+                <div className="flex items-center justify-center p-12">
+                  <div className="text-gray-500">No employees found. Add your first employee to get started.</div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">EMP ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {employees.map((employee) => (
+                        <tr key={employee.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{employee.mobile}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{employee.empId}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              employee.role === 'TeamIncharge' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                            }`}>
+                              {employee.role === 'TeamIncharge' ? 'Team Incharge' : 'Telecaller'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              employee.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {employee.status === 'active' ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => openEditEmployeeModal(employee)}
+                                className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+                                disabled={isLoading}
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEmployee(employee.id, employee.name)}
+                                className="text-red-600 hover:text-red-900 inline-flex items-center"
+                                disabled={isLoading}
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => handleResetPassword(employee.id, employee.name)}
+                                className="text-gray-600 hover:text-gray-900 inline-flex items-center"
+                                disabled={isLoading}
+                              >
+                                <Key className="w-4 h-4 mr-1" />
+                                Reset
+                              </button>
+                              <button
+                                onClick={() => handleToggleEmployeeStatus(employee)}
+                                className={`inline-flex items-center ${
+                                  employee.status === 'active'
+                                    ? 'text-red-600 hover:text-red-900'
+                                    : 'text-green-600 hover:text-green-900'
+                                }`}
+                                disabled={isLoading}
+                              >
+                                {employee.status === 'active' ? (
+                                  <>
+                                    <ShieldOff className="w-4 h-4 mr-1" />
+                                    Block
+                                  </>
+                                ) : (
+                                  <>
+                                    <Shield className="w-4 h-4 mr-1" />
+                                    Unblock
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -2126,6 +2229,275 @@ const CompanyAdminDashboard: React.FC<CompanyAdminDashboardProps> = ({ user, onL
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAddEmployeeModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Add Employee</h3>
+              <button
+                onClick={() => {
+                  setShowAddEmployeeModal(false);
+                  resetEmployeeForm();
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEmployee} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={employeeFormData.name}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, name: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mobile Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={employeeFormData.mobile}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, mobile: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  EMP ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={employeeFormData.empId}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, empId: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={employeeFormData.password}
+                    onChange={(e) => setEmployeeFormData({...employeeFormData, password: e.target.value})}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={employeeFormData.role}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, role: e.target.value as EmployeeRole})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Telecaller">Telecaller</option>
+                  <option value="TeamIncharge">Team Incharge</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddEmployeeModal(false);
+                    resetEmployeeForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-md text-sm font-medium"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Adding...' : 'Add Employee'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditEmployeeModal && editingEmployee && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Employee</h3>
+              <button
+                onClick={() => {
+                  setShowEditEmployeeModal(false);
+                  setEditingEmployee(null);
+                  resetEmployeeForm();
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditEmployee} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={employeeFormData.name}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, name: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mobile Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={employeeFormData.mobile}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, mobile: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  EMP ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={employeeFormData.empId}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, empId: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={employeeFormData.role}
+                  onChange={(e) => setEmployeeFormData({...employeeFormData, role: e.target.value as EmployeeRole})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Telecaller">Telecaller</option>
+                  <option value="TeamIncharge">Team Incharge</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditEmployeeModal(false);
+                    setEditingEmployee(null);
+                    resetEmployeeForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-md text-sm font-medium"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Updating...' : 'Update Employee'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showTempPasswordModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Password Reset Successful</h3>
+              <button
+                onClick={() => {
+                  setShowTempPasswordModal(false);
+                  setTempPassword('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                The password has been reset. Please share this temporary password with the employee:
+              </p>
+
+              <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <code className="text-lg font-mono font-bold text-gray-900">{tempPassword}</code>
+                  <button
+                    onClick={() => copyToClipboard(tempPassword)}
+                    className="ml-4 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Please ensure the employee changes this password after their first login.
+              </p>
+
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => {
+                    setShowTempPasswordModal(false);
+                    setTempPassword('');
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
