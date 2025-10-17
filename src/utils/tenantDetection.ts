@@ -141,6 +141,9 @@ export const createTenant = async (tenantData: Omit<Tenant, 'id' | 'createdAt' |
     if (error.code === '23503') {
       throw new Error('Invalid super admin reference. Please log in again.');
     }
+    if (error.code === '42501') {
+      throw new Error('Permission denied. Please ensure you are logged in as a super admin.');
+    }
     throw new Error(error.message || 'Failed to create tenant');
   }
 
