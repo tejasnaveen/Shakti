@@ -135,7 +135,13 @@ export const createTenant = async (tenantData: Omit<Tenant, 'id' | 'createdAt' |
 
   if (error) {
     console.error('Error creating tenant:', error);
-    throw new Error('Failed to create tenant');
+    if (error.code === '23505') {
+      throw new Error('A tenant with this subdomain already exists');
+    }
+    if (error.code === '23503') {
+      throw new Error('Invalid super admin reference. Please log in again.');
+    }
+    throw new Error(error.message || 'Failed to create tenant');
   }
 
   return {

@@ -129,11 +129,11 @@ CREATE TABLE IF NOT EXISTS tenants (
   
   -- Settings
   settings jsonb DEFAULT '{"branding": {}, "features": {"voip": false, "sms": false, "analytics": true, "apiAccess": false}}'::jsonb,
-  
+
   -- Metadata
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
-  created_by uuid REFERENCES super_admins(id)
+  created_by uuid REFERENCES super_admins(id) ON DELETE SET NULL
 );
 
 -- =====================================================
@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS company_admins (
   -- Metadata
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
-  created_by uuid REFERENCES super_admins(id),
+  created_by uuid REFERENCES super_admins(id) ON DELETE SET NULL,
   
   UNIQUE(tenant_id, employee_id)
 );

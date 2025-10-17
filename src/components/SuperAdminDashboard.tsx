@@ -261,13 +261,14 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
         status: newAdmin.status || 'active'
       };
 
-      const createdAdmin = await createAdmin(viewingTenant.id, adminData);
+      const createdAdmin = await createAdmin(viewingTenant.id, adminData, user.id);
       setTenantAdmins([...tenantAdmins, createdAdmin]);
       setShowAdminModal(false);
       resetAdminForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating admin:', error);
-      alert('Failed to create admin');
+      const errorMessage = error?.message || 'Failed to create admin. Please check all fields and try again.';
+      alert(`Failed to create admin: ${errorMessage}`);
     }
   };
 
@@ -363,7 +364,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
             apiAccess: false
           }
         },
-        createdBy: 'superadmin_1'
+        createdBy: user.id
       };
 
       const createdTenant = await createTenant(tenantData);
@@ -372,9 +373,10 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogou
       setEditingTenant(null);
       setViewingTenant(null);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating tenant:', error);
-      alert('Failed to create tenant');
+      const errorMessage = error?.message || 'Failed to create tenant. Please check all fields and try again.';
+      alert(`Failed to create tenant: ${errorMessage}`);
     }
   };
 

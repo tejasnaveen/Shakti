@@ -65,26 +65,38 @@ export const getAdminById = async (adminId: string): Promise<CompanyAdmin | null
   };
 };
 
-export const createAdmin = async (tenantId: string, adminData: CreateAdminRequest): Promise<CompanyAdmin> => {
+export const createAdmin = async (tenantId: string, adminData: CreateAdminRequest, createdBy?: string): Promise<CompanyAdmin> => {
   const passwordHash = await hashPassword(adminData.password);
+
+  const insertData: any = {
+    tenant_id: tenantId,
+    name: adminData.name,
+    employee_id: adminData.employeeId,
+    email: adminData.email,
+    password_hash: passwordHash,
+    status: adminData.status || 'active',
+    role: 'CompanyAdmin'
+  };
+
+  if (createdBy) {
+    insertData.created_by = createdBy;
+  }
 
   const { data, error } = await supabase
     .from('company_admins')
-    .insert({
-      tenant_id: tenantId,
-      name: adminData.name,
-      employee_id: adminData.employeeId,
-      email: adminData.email,
-      password_hash: passwordHash,
-      status: adminData.status || 'active',
-      role: 'CompanyAdmin'
-    })
+    .insert(insertData)
     .select()
     .single();
 
   if (error) {
     console.error('Error creating admin:', error);
-    throw new Error('Failed to create admin');
+    if (error.code === '23505') {
+      throw new Error('An admin with this email or employee ID already exists');
+    }
+    if (error.code === '23503') {
+      throw new Error('Invalid reference. Please check tenant information.');
+    }
+    throw new Error(error.message || 'Failed to create admin');
   }
 
   return {
