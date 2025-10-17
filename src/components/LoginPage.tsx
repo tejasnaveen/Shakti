@@ -154,7 +154,7 @@ const LoginPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  Username
+                  {selectedRole === 'SuperAdmin' ? 'Username' : 'Employee ID'}
                 </label>
                 <input
                   id="username"
@@ -162,9 +162,14 @@ const LoginPage: React.FC = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm"
-                  placeholder="Enter your username"
+                  placeholder={selectedRole === 'SuperAdmin' ? 'Enter your username' : 'Enter your Employee ID (e.g., EMP001)'}
                   required
                 />
+                {selectedRole !== 'SuperAdmin' && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Use the Employee ID provided by your administrator
+                  </p>
+                )}
               </div>
 
               <div>
